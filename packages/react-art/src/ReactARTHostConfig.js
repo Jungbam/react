@@ -450,6 +450,7 @@ export function preparePortalMount(portalInstance: any): void {
   // noop
 }
 
+// eslint-disable-next-line no-undef
 export function detachDeletedInstance(node: Instance): void {
   // noop
 }
@@ -458,6 +459,23 @@ export function requestPostPaintCallback(callback: (time: number) => void) {
   // noop
 }
 
+export function maySuspendCommit(type, props) {
+  return false;
+}
+
+export function preloadInstance(type, props) {
+  // Return true to indicate it's already loaded
+  return true;
+}
+
+export function startSuspendingCommit() {}
+
+export function suspendInstance(type, props) {}
+
+export function waitForCommitToBeReady() {
+  return null;
+}
+// eslint-disable-next-line no-undef
 export function prepareRendererToRender(container: Container): void {
   // noop
 }

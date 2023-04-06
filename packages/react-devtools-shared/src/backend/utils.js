@@ -9,6 +9,7 @@
  */
 
 import {copy} from 'clipboard-js';
+import {compareVersions} from 'compare-versions';
 import {dehydrate} from '../hydration';
 import isArray from 'shared/isArray';
 
@@ -20,8 +21,8 @@ export function cleanForBridge(
   path?: Array<string | number> = [],
 ): DehydratedData | null {
   if (data !== null) {
-    const cleanedPaths = [];
-    const unserializablePaths = [];
+    const cleanedPaths: Array<Array<string | number>> = [];
+    const unserializablePaths: Array<Array<string | number>> = [];
     const cleanedData = dehydrate(
       data,
       cleanedPaths,
@@ -71,7 +72,7 @@ export function copyWithDelete(
       delete updated[key];
     }
   } else {
-    // $FlowFixMe number or string is fine here
+    // $FlowFixMe[incompatible-use] number or string is fine here
     updated[key] = copyWithDelete(obj[key], path, index + 1);
   }
   return updated;
@@ -89,7 +90,7 @@ export function copyWithRename(
   const updated = isArray(obj) ? obj.slice() : {...obj};
   if (index + 1 === oldPath.length) {
     const newKey = newPath[index];
-    // $FlowFixMe number or string is fine here
+    // $FlowFixMe[incompatible-use] number or string is fine here
     updated[newKey] = updated[oldKey];
     if (isArray(updated)) {
       updated.splice(((oldKey: any): number), 1);
@@ -97,7 +98,7 @@ export function copyWithRename(
       delete updated[oldKey];
     }
   } else {
-    // $FlowFixMe number or string is fine here
+    // $FlowFixMe[incompatible-use] number or string is fine here
     updated[oldKey] = copyWithRename(obj[oldKey], oldPath, newPath, index + 1);
   }
   return updated;
@@ -114,14 +115,15 @@ export function copyWithSet(
   }
   const key = path[index];
   const updated = isArray(obj) ? obj.slice() : {...obj};
-  // $FlowFixMe number or string is fine here
+  // $FlowFixMe[incompatible-use] number or string is fine here
   updated[key] = copyWithSet(obj[key], path, value, index + 1);
   return updated;
 }
 
-export function getEffectDurations(
-  root: Object,
-): {effectDuration: any | null, passiveEffectDuration: any | null} {
+export function getEffectDurations(root: Object): {
+  effectDuration: any | null,
+  passiveEffectDuration: any | null,
+} {
   // Profiling durations are only available for certain builds.
   // If available, they'll be stored on the HostRoot.
   let effectDuration = null;
@@ -142,7 +144,7 @@ export function getEffectDurations(
 }
 
 export function serializeToString(data: any): string {
-  const cache = new Set();
+  const cache = new Set<mixed>();
   // Use a custom replacer function to protect against circular references.
   return JSON.stringify(data, (key, value) => {
     if (typeof value === 'object' && value !== null) {
@@ -151,7 +153,6 @@ export function serializeToString(data: any): string {
       }
       cache.add(value);
     }
-    // $FlowFixMe
     if (typeof value === 'bigint') {
       return value.toString() + 'n';
     }
@@ -274,4 +275,12 @@ export function isSynchronousXHRSupported(): boolean {
     window.document.featurePolicy &&
     window.document.featurePolicy.allowsFeature('sync-xhr')
   );
+}
+
+export function gt(a: string = '', b: string = ''): boolean {
+  return compareVersions(a, b) === 1;
+}
+
+export function gte(a: string = '', b: string = ''): boolean {
+  return compareVersions(a, b) > -1;
 }

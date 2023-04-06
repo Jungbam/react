@@ -16,22 +16,29 @@ let use;
 let Suspense;
 let DiscreteEventPriority;
 let startTransition;
+let waitForMicrotasks;
 
 describe('isomorphic act()', () => {
   beforeEach(() => {
     React = require('react');
 
     ReactNoop = require('react-noop-renderer');
-    DiscreteEventPriority = require('react-reconciler/constants')
-      .DiscreteEventPriority;
+    DiscreteEventPriority =
+      require('react-reconciler/constants').DiscreteEventPriority;
     act = React.unstable_act;
     use = React.use;
     Suspense = React.Suspense;
     startTransition = React.startTransition;
+
+    waitForMicrotasks = require('internal-test-utils').waitForMicrotasks;
   });
 
   beforeEach(() => {
     global.IS_REACT_ACT_ENVIRONMENT = true;
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   // @gate __DEV__
@@ -47,7 +54,7 @@ describe('isomorphic act()', () => {
     // Nothing has rendered yet
     expect(root).toMatchRenderedOutput(null);
     // Flush the microtasks by awaiting
-    await null;
+    await waitForMicrotasks();
     expect(root).toMatchRenderedOutput('A');
 
     // Now do the same thing but wrap the update with `act`. No
@@ -208,7 +215,7 @@ describe('isomorphic act()', () => {
       return use(promise);
     }
 
-    spyOnDev(console, 'error');
+    spyOnDev(console, 'error').mockImplementation(() => {});
     const root = ReactNoop.createRoot();
     act(() => {
       startTransition(() => {
@@ -225,12 +232,10 @@ describe('isomorphic act()', () => {
     //
     // The exact number of microtasks is an implementation detail; just needs
     // to happen when the microtask queue is flushed.
-    await null;
-    await null;
-    await null;
+    await waitForMicrotasks();
 
-    expect(console.error.calls.count()).toBe(1);
-    expect(console.error.calls.argsFor(0)[0]).toContain(
+    expect(console.error).toHaveBeenCalledTimes(1);
+    expect(console.error.mock.calls[0][0]).toContain(
       'Warning: A component suspended inside an `act` scope, but the `act` ' +
         'call was not awaited. When testing React components that ' +
         'depend on asynchronous data, you must await the result:\n\n' +
@@ -260,7 +265,7 @@ describe('isomorphic act()', () => {
       return 'Async';
     }
 
-    spyOnDev(console, 'error');
+    spyOnDev(console, 'error').mockImplementation(() => {});
     const root = ReactNoop.createRoot();
     act(() => {
       startTransition(() => {
@@ -278,11 +283,9 @@ describe('isomorphic act()', () => {
     //
     // The exact number of microtasks is an implementation detail; just needs
     // to happen when the microtask queue is flushed.
-    await null;
-    await null;
-    await null;
+    await waitForMicrotasks();
 
-    expect(console.error.calls.count()).toBe(0);
+    expect(console.error).toHaveBeenCalledTimes(0);
 
     // Finish loading the data
     await act(async () => {

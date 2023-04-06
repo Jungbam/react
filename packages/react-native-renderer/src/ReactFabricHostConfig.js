@@ -7,32 +7,23 @@
  * @flow
  */
 
-import type {ElementRef} from 'react';
-import type {
-  HostComponent,
-  MeasureInWindowOnSuccessCallback,
-  MeasureLayoutOnSuccessCallback,
-  MeasureOnSuccessCallback,
-  NativeMethods,
-  ViewConfig,
-  TouchedViewDataAtPoint,
-} from './ReactNativeTypes';
-
-import {mountSafeCallback_NOT_REALLY_SAFE} from './NativeMethodsMixinUtils';
+import type {TouchedViewDataAtPoint, ViewConfig} from './ReactNativeTypes';
 import {create, diff} from './ReactNativeAttributePayload';
-
 import {dispatchEvent} from './ReactFabricEventEmitter';
-
 import {
   DefaultEventPriority,
   DiscreteEventPriority,
 } from 'react-reconciler/src/ReactEventPriorities';
+import {HostText} from 'react-reconciler/src/ReactWorkTags';
 
 // Modules provided by RN:
 import {
   ReactNativeViewConfigRegistry,
-  TextInputState,
   deepFreezeAndThrowOnMutationInDev,
+  createPublicInstance,
+  createPublicTextInstance,
+  type PublicInstance as ReactNativePublicInstance,
+  type PublicTextInstance,
 } from 'react-native/Libraries/ReactPrivate/ReactNativePrivateInterface';
 
 const {
@@ -46,9 +37,6 @@ const {
   appendChildToSet: appendChildNodeToSet,
   completeRoot,
   registerEventHandler,
-  measure: fabricMeasure,
-  measureInWindow: fabricMeasureInWindow,
-  measureLayout: fabricMeasureLayout,
   unstable_DefaultEventPriority: FabricDefaultPriority,
   unstable_DiscreteEventPriority: FabricDiscretePriority,
   unstable_getCurrentEventPriority: fabricGetCurrentEventPriority,
@@ -62,17 +50,35 @@ const {get: getViewConfigForType} = ReactNativeViewConfigRegistry;
 // This means that they never overlap.
 let nextReactTag = 2;
 
+type InternalInstanceHandle = Object;
 type Node = Object;
 export type Type = string;
 export type Props = Object;
 export type Instance = {
+  // Reference to the shadow node.
   node: Node,
-  canonical: ReactFabricHostComponent,
-  ...
+  // This object is shared by all the clones of the instance.
+  // We use it to access their shared public instance (exposed through refs)
+  // and to access its committed state for events, etc.
+  canonical: {
+    nativeTag: number,
+    viewConfig: ViewConfig,
+    currentProps: Props,
+    // Reference to the React handle (the fiber)
+    internalInstanceHandle: InternalInstanceHandle,
+    // Exposed through refs.
+    publicInstance: PublicInstance,
+  },
 };
-export type TextInstance = {node: Node, ...};
+export type TextInstance = {
+  // Reference to the shadow node.
+  node: Node,
+  // Text instances are never cloned, so we don't need to keep a "canonical"
+  // reference to make sure all clones of the instance point to the same values.
+  publicInstance?: PublicTextInstance,
+};
 export type HydratableInstance = Instance | TextInstance;
-export type PublicInstance = ReactFabricHostComponent;
+export type PublicInstance = ReactNativePublicInstance;
 export type Container = number;
 export type ChildSet = Object;
 export type HostContext = $ReadOnly<{
@@ -94,28 +100,6 @@ export type RendererInspectionConfig = $ReadOnly<{
   ) => void,
 }>;
 
-// TODO?: find a better place for this type to live
-export type EventListenerOptions = $ReadOnly<{
-  capture?: boolean,
-  once?: boolean,
-  passive?: boolean,
-  signal: mixed, // not yet implemented
-}>;
-export type EventListenerRemoveOptions = $ReadOnly<{
-  capture?: boolean,
-}>;
-
-// TODO?: this will be changed in the future to be w3c-compatible and allow "EventListener" objects as well as functions.
-export type EventListener = Function;
-
-type InternalEventListeners = {
-  [string]: {
-    listener: EventListener,
-    options: EventListenerOptions,
-    invalidated: boolean,
-  }[],
-};
-
 // TODO: Remove this conditional once all changes have propagated.
 if (registerEventHandler) {
   /**
@@ -123,202 +107,6 @@ if (registerEventHandler) {
    */
   registerEventHandler(dispatchEvent);
 }
-
-/**
- * This is used for refs on host components.
- */
-class ReactFabricHostComponent {
-  _nativeTag: number;
-  viewConfig: ViewConfig;
-  currentProps: Props;
-  _internalInstanceHandle: Object;
-  _eventListeners: ?InternalEventListeners;
-
-  constructor(
-    tag: number,
-    viewConfig: ViewConfig,
-    props: Props,
-    internalInstanceHandle: Object,
-  ) {
-    this._nativeTag = tag;
-    this.viewConfig = viewConfig;
-    this.currentProps = props;
-    this._internalInstanceHandle = internalInstanceHandle;
-  }
-
-  blur() {
-    TextInputState.blurTextInput(this);
-  }
-
-  focus() {
-    TextInputState.focusTextInput(this);
-  }
-
-  measure(callback: MeasureOnSuccessCallback) {
-    const {stateNode} = this._internalInstanceHandle;
-    if (stateNode != null) {
-      fabricMeasure(
-        stateNode.node,
-        mountSafeCallback_NOT_REALLY_SAFE(this, callback),
-      );
-    }
-  }
-
-  measureInWindow(callback: MeasureInWindowOnSuccessCallback) {
-    const {stateNode} = this._internalInstanceHandle;
-    if (stateNode != null) {
-      fabricMeasureInWindow(
-        stateNode.node,
-        mountSafeCallback_NOT_REALLY_SAFE(this, callback),
-      );
-    }
-  }
-
-  measureLayout(
-    relativeToNativeNode: number | ElementRef<HostComponent<mixed>>,
-    onSuccess: MeasureLayoutOnSuccessCallback,
-    onFail?: () => void /* currently unused */,
-  ) {
-    if (
-      typeof relativeToNativeNode === 'number' ||
-      !(relativeToNativeNode instanceof ReactFabricHostComponent)
-    ) {
-      if (__DEV__) {
-        console.error(
-          'Warning: ref.measureLayout must be called with a ref to a native component.',
-        );
-      }
-
-      return;
-    }
-
-    const toStateNode = this._internalInstanceHandle.stateNode;
-    const fromStateNode =
-      relativeToNativeNode._internalInstanceHandle.stateNode;
-
-    if (toStateNode != null && fromStateNode != null) {
-      fabricMeasureLayout(
-        toStateNode.node,
-        fromStateNode.node,
-        mountSafeCallback_NOT_REALLY_SAFE(this, onFail),
-        mountSafeCallback_NOT_REALLY_SAFE(this, onSuccess),
-      );
-    }
-  }
-
-  setNativeProps(nativeProps: Object) {
-    if (__DEV__) {
-      console.error(
-        'Warning: setNativeProps is not currently supported in Fabric',
-      );
-    }
-
-    return;
-  }
-
-  // This API (addEventListener, removeEventListener) attempts to adhere to the
-  // w3 Level2 Events spec as much as possible, treating HostComponent as a DOM node.
-  //
-  // Unless otherwise noted, these methods should "just work" and adhere to the W3 specs.
-  // If they deviate in a way that is not explicitly noted here, you've found a bug!
-  //
-  // See:
-  // * https://www.w3.org/TR/DOM-Level-2-Events/events.html
-  // * https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/addEventListener
-  // * https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/removeEventListener
-  //
-  // And notably, not implemented (yet?):
-  // * https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/dispatchEvent
-  //
-  //
-  // Deviations from spec/TODOs:
-  // (1) listener must currently be a function, we do not support EventListener objects yet.
-  // (2) we do not support the `signal` option / AbortSignal yet
-  addEventListener_unstable(
-    eventType: string,
-    listener: EventListener,
-    options: EventListenerOptions | boolean,
-  ) {
-    if (typeof eventType !== 'string') {
-      throw new Error('addEventListener_unstable eventType must be a string');
-    }
-    if (typeof listener !== 'function') {
-      throw new Error('addEventListener_unstable listener must be a function');
-    }
-
-    // The third argument is either boolean indicating "captures" or an object.
-    const optionsObj =
-      typeof options === 'object' && options !== null ? options : {};
-    const capture =
-      (typeof options === 'boolean' ? options : optionsObj.capture) || false;
-    const once = optionsObj.once || false;
-    const passive = optionsObj.passive || false;
-    const signal = null; // TODO: implement signal/AbortSignal
-
-    /* $FlowFixMe the old version of Flow doesn't have a good way to define an
-     * empty exact object. */
-    const eventListeners: InternalEventListeners = this._eventListeners || {};
-    if (this._eventListeners == null) {
-      this._eventListeners = eventListeners;
-    }
-
-    const namedEventListeners = eventListeners[eventType] || [];
-    if (eventListeners[eventType] == null) {
-      eventListeners[eventType] = namedEventListeners;
-    }
-
-    namedEventListeners.push({
-      listener: listener,
-      invalidated: false,
-      options: {
-        capture: capture,
-        once: once,
-        passive: passive,
-        signal: signal,
-      },
-    });
-  }
-
-  // See https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/removeEventListener
-  removeEventListener_unstable(
-    eventType: string,
-    listener: EventListener,
-    options: EventListenerRemoveOptions | boolean,
-  ) {
-    // eventType and listener must be referentially equal to be removed from the listeners
-    // data structure, but in "options" we only check the `capture` flag, according to spec.
-    // That means if you add the same function as a listener with capture set to true and false,
-    // you must also call removeEventListener twice with capture set to true/false.
-    const optionsObj =
-      typeof options === 'object' && options !== null ? options : {};
-    const capture =
-      (typeof options === 'boolean' ? options : optionsObj.capture) || false;
-
-    // If there are no event listeners or named event listeners, we can bail early - our
-    // job is already done.
-    const eventListeners = this._eventListeners;
-    if (!eventListeners) {
-      return;
-    }
-    const namedEventListeners = eventListeners[eventType];
-    if (!namedEventListeners) {
-      return;
-    }
-
-    // TODO: optimize this path to make remove cheaper
-    eventListeners[eventType] = namedEventListeners.filter(listenerObj => {
-      return !(
-        listenerObj.listener === listener &&
-        listenerObj.options.capture === capture
-      );
-    });
-  }
-}
-
-// eslint-disable-next-line no-unused-expressions
-// $FlowFixMe[class-object-subtyping] found when upgrading Flow
-// $FlowFixMe[method-unbinding] found when upgrading Flow
-(ReactFabricHostComponent.prototype: $ReadOnly<{...NativeMethods, ...}>);
 
 export * from 'react-reconciler/src/ReactFiberHostConfigWithNoMutation';
 export * from 'react-reconciler/src/ReactFiberHostConfigWithNoHydration';
@@ -340,7 +128,7 @@ export function createInstance(
   props: Props,
   rootContainerInstance: Container,
   hostContext: HostContext,
-  internalInstanceHandle: Object,
+  internalInstanceHandle: InternalInstanceHandle,
 ): Instance {
   const tag = nextReactTag;
   nextReactTag += 2;
@@ -365,16 +153,21 @@ export function createInstance(
     internalInstanceHandle, // internalInstanceHandle
   );
 
-  const component = new ReactFabricHostComponent(
+  const component = createPublicInstance(
     tag,
     viewConfig,
-    props,
     internalInstanceHandle,
   );
 
   return {
     node: node,
-    canonical: component,
+    canonical: {
+      nativeTag: tag,
+      viewConfig,
+      currentProps: props,
+      internalInstanceHandle,
+      publicInstance: component,
+    },
   };
 }
 
@@ -382,7 +175,7 @@ export function createTextInstance(
   text: string,
   rootContainerInstance: Container,
   hostContext: HostContext,
-  internalInstanceHandle: Object,
+  internalInstanceHandle: InternalInstanceHandle,
 ): TextInstance {
   if (__DEV__) {
     if (!hostContext.isInAParentText) {
@@ -443,8 +236,44 @@ export function getChildHostContext(
   }
 }
 
-export function getPublicInstance(instance: Instance): * {
-  return instance.canonical;
+export function getPublicInstance(instance: Instance): null | PublicInstance {
+  if (instance.canonical != null && instance.canonical.publicInstance != null) {
+    return instance.canonical.publicInstance;
+  }
+
+  // For compatibility with the legacy renderer, in case it's used with Fabric
+  // in the same app.
+  // $FlowExpectedError[prop-missing]
+  if (instance._nativeTag != null) {
+    // $FlowExpectedError[incompatible-return]
+    return instance;
+  }
+
+  return null;
+}
+
+function getPublicTextInstance(
+  textInstance: TextInstance,
+  internalInstanceHandle: InternalInstanceHandle,
+): PublicTextInstance {
+  if (textInstance.publicInstance == null) {
+    textInstance.publicInstance = createPublicTextInstance(
+      internalInstanceHandle,
+    );
+  }
+  return textInstance.publicInstance;
+}
+
+export function getPublicInstanceFromInternalInstanceHandle(
+  internalInstanceHandle: InternalInstanceHandle,
+): null | PublicInstance | PublicTextInstance {
+  if (internalInstanceHandle.tag === HostText) {
+    const textInstance: TextInstance = internalInstanceHandle.stateNode;
+    return getPublicTextInstance(textInstance, internalInstanceHandle);
+  }
+
+  const instance: Instance = internalInstanceHandle.stateNode;
+  return getPublicInstance(instance);
 }
 
 export function prepareForCommit(containerInfo: Container): null | Object {
@@ -522,7 +351,7 @@ export function cloneInstance(
   type: string,
   oldProps: Props,
   newProps: Props,
-  internalInstanceHandle: Object,
+  internalInstanceHandle: InternalInstanceHandle,
   keepChildren: boolean,
   recyclableInstance: null | Instance,
 ): Instance {
@@ -551,7 +380,7 @@ export function cloneHiddenInstance(
   instance: Instance,
   type: string,
   props: Props,
-  internalInstanceHandle: Object,
+  internalInstanceHandle: InternalInstanceHandle,
 ): Instance {
   const viewConfig = instance.canonical.viewConfig;
   const node = instance.node;
@@ -568,7 +397,7 @@ export function cloneHiddenInstance(
 export function cloneHiddenTextInstance(
   instance: Instance,
   text: string,
-  internalInstanceHandle: Object,
+  internalInstanceHandle: InternalInstanceHandle,
 ): TextInstance {
   throw new Error('Not yet implemented.');
 }
@@ -600,7 +429,9 @@ export function getInstanceFromNode(node: any): empty {
   throw new Error('Not yet implemented.');
 }
 
-export function beforeActiveInstanceBlur(internalInstanceHandle: Object) {
+export function beforeActiveInstanceBlur(
+  internalInstanceHandle: InternalInstanceHandle,
+) {
   // noop
 }
 
@@ -618,6 +449,22 @@ export function detachDeletedInstance(node: Instance): void {
 
 export function requestPostPaintCallback(callback: (time: number) => void) {
   // noop
+}
+
+export function maySuspendCommit(type: Type, props: Props): boolean {
+  return false;
+}
+
+export function preloadInstance(type: Type, props: Props): boolean {
+  return true;
+}
+
+export function startSuspendingCommit(): void {}
+
+export function suspendInstance(type: Type, props: Props): void {}
+
+export function waitForCommitToBeReady(): null {
+  return null;
 }
 
 export function prepareRendererToRender(container: Container): void {

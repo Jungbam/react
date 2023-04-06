@@ -84,7 +84,7 @@ export function alphaSortKeys(
 export function getAllEnumerableKeys(
   obj: Object,
 ): Set<string | number | symbol> {
-  const keys = new Set();
+  const keys = new Set<string | number | symbol>();
   let current = obj;
   while (current != null) {
     const currentKeys = [
@@ -93,7 +93,7 @@ export function getAllEnumerableKeys(
     ];
     const descriptors = Object.getOwnPropertyDescriptors(current);
     currentKeys.forEach(key => {
-      // $FlowFixMe: key can be a Symbol https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/getOwnPropertyDescriptor
+      // $FlowFixMe[incompatible-type]: key can be a Symbol https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/getOwnPropertyDescriptor
       if (descriptors[key].enumerable) {
         keys.add(key);
       }
@@ -203,7 +203,7 @@ export function printOperationsArray(operations: Array<number>) {
   let i = 2;
 
   // Reassemble the string table.
-  const stringTable = [
+  const stringTable: Array<null | string> = [
     null, // ID = 0 corresponds to the null string.
   ];
   const stringTableSize = operations[i++];
@@ -534,6 +534,7 @@ export type DataType =
   | 'array_buffer'
   | 'bigint'
   | 'boolean'
+  | 'class_instance'
   | 'data_view'
   | 'date'
   | 'function'
@@ -620,6 +621,11 @@ export function getDataType(data: Object): DataType {
           return 'html_all_collection';
         }
       }
+
+      if (!isPlainObject(data)) {
+        return 'class_instance';
+      }
+
       return 'object';
     case 'string':
       return 'string';
@@ -835,6 +841,8 @@ export function formatDataForPreview(
     }
     case 'date':
       return data.toString();
+    case 'class_instance':
+      return data.constructor.name;
     case 'object':
       if (showFormattedValue) {
         const keys = Array.from(getAllEnumerableKeys(data)).sort(alphaSortKeys);
@@ -873,3 +881,12 @@ export function formatDataForPreview(
       }
   }
 }
+
+// Basically checking that the object only has Object in its prototype chain
+export const isPlainObject = (object: Object): boolean => {
+  const objectPrototype = Object.getPrototypeOf(object);
+  if (!objectPrototype) return true;
+
+  const objectParentPrototype = Object.getPrototypeOf(objectPrototype);
+  return !objectParentPrototype;
+};

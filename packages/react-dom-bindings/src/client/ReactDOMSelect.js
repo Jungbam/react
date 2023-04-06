@@ -12,7 +12,6 @@ import {getCurrentFiberOwnerNameInDevOrNull} from 'react-reconciler/src/ReactCur
 
 import {checkControlledValueProps} from '../shared/ReactControlledValuePropTypes';
 import {getToStringValue, toString} from './ToStringValue';
-import assign from 'shared/assign';
 import isArray from 'shared/isArray';
 
 let didWarnValueDefaultValue;
@@ -38,7 +37,7 @@ const valuePropNames = ['value', 'defaultValue'];
 /**
  * Validation function for `value` and `defaultValue`.
  */
-function checkSelectPropTypes(props) {
+function checkSelectPropTypes(props: any) {
   if (__DEV__) {
     checkControlledValueProps('select', props);
 
@@ -77,7 +76,7 @@ function updateOptions(
 
   if (multiple) {
     const selectedValues = (propValue: Array<string>);
-    const selectedValue = {};
+    const selectedValue: {[string]: boolean} = {};
     for (let i = 0; i < selectedValues.length; i++) {
       // Prefix to avoid chaos with special keys.
       selectedValue['$' + selectedValues[i]] = true;
@@ -129,12 +128,6 @@ function updateOptions(
  * If `defaultValue` is provided, any options with the supplied values will be
  * selected.
  */
-
-export function getHostProps(element: Element, props: Object): Object {
-  return assign({}, props, {
-    value: undefined,
-  });
-}
 
 export function initWrapperState(element: Element, props: Object) {
   const node = ((element: any): SelectWithWrapperState);

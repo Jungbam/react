@@ -7,7 +7,12 @@
  * @flow
  */
 
-import type {FormatContext} from './ReactDOMServerFormatConfig';
+import type {
+  BootstrapScriptDescriptor,
+  FormatContext,
+  StreamingFormat,
+  InstructionState,
+} from './ReactDOMServerFormatConfig';
 
 import {
   createResponseState as createResponseStateImpl,
@@ -31,16 +36,23 @@ export const isPrimaryRenderer = false;
 export type ResponseState = {
   // Keep this in sync with ReactDOMServerFormatConfig
   bootstrapChunks: Array<Chunk | PrecomputedChunk>,
-  startInlineScript: PrecomputedChunk,
   placeholderPrefix: PrecomputedChunk,
   segmentPrefix: PrecomputedChunk,
   boundaryPrefix: string,
   idPrefix: string,
   nextSuspenseID: number,
-  sentCompleteSegmentFunction: boolean,
-  sentCompleteBoundaryFunction: boolean,
-  sentClientRenderFunction: boolean,
-  sentStyleInsertionFunction: boolean,
+  streamingFormat: StreamingFormat,
+  startInlineScript: PrecomputedChunk,
+  instructions: InstructionState,
+  externalRuntimeConfig: BootstrapScriptDescriptor | null,
+  htmlChunks: null | Array<Chunk | PrecomputedChunk>,
+  headChunks: null | Array<Chunk | PrecomputedChunk>,
+  hasBody: boolean,
+  charsetChunks: Array<Chunk | PrecomputedChunk>,
+  preconnectChunks: Array<Chunk | PrecomputedChunk>,
+  preloadChunks: Array<Chunk | PrecomputedChunk>,
+  hoistableChunks: Array<Chunk | PrecomputedChunk>,
+  stylesToHoist: boolean,
   // This is an extra field for the legacy renderer
   generateStaticMarkup: boolean,
 };
@@ -48,21 +60,37 @@ export type ResponseState = {
 export function createResponseState(
   generateStaticMarkup: boolean,
   identifierPrefix: string | void,
+  externalRuntimeConfig: string | BootstrapScriptDescriptor | void,
 ): ResponseState {
-  const responseState = createResponseStateImpl(identifierPrefix, undefined);
+  const responseState = createResponseStateImpl(
+    identifierPrefix,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    externalRuntimeConfig,
+  );
   return {
     // Keep this in sync with ReactDOMServerFormatConfig
     bootstrapChunks: responseState.bootstrapChunks,
-    startInlineScript: responseState.startInlineScript,
     placeholderPrefix: responseState.placeholderPrefix,
     segmentPrefix: responseState.segmentPrefix,
     boundaryPrefix: responseState.boundaryPrefix,
     idPrefix: responseState.idPrefix,
     nextSuspenseID: responseState.nextSuspenseID,
-    sentCompleteSegmentFunction: responseState.sentCompleteSegmentFunction,
-    sentCompleteBoundaryFunction: responseState.sentCompleteBoundaryFunction,
-    sentClientRenderFunction: responseState.sentClientRenderFunction,
-    sentStyleInsertionFunction: responseState.sentStyleInsertionFunction,
+    streamingFormat: responseState.streamingFormat,
+    startInlineScript: responseState.startInlineScript,
+    instructions: responseState.instructions,
+    externalRuntimeConfig: responseState.externalRuntimeConfig,
+    htmlChunks: responseState.htmlChunks,
+    headChunks: responseState.headChunks,
+    hasBody: responseState.hasBody,
+    charsetChunks: responseState.charsetChunks,
+    preconnectChunks: responseState.preconnectChunks,
+    preloadChunks: responseState.preloadChunks,
+    hoistableChunks: responseState.hoistableChunks,
+    stylesToHoist: responseState.stylesToHoist,
+
     // This is an extra field for the legacy renderer
     generateStaticMarkup,
   };
@@ -99,14 +127,15 @@ export {
   writeClientRenderBoundaryInstruction,
   writeStartPendingSuspenseBoundary,
   writeEndPendingSuspenseBoundary,
+  writeResourcesForBoundary,
   writePlaceholder,
   writeCompletedRoot,
   createResources,
   createBoundaryResources,
-  writeInitialResources,
-  writeImmediateResources,
+  writePreamble,
+  writeHoistables,
+  writePostamble,
   hoistResources,
-  hoistResourcesToRoot,
   setCurrentlyRenderingBoundaryResourcesTarget,
   prepareToRender,
   cleanupAfterRender,

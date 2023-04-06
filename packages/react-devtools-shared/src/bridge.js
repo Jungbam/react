@@ -339,10 +339,10 @@ class Bridge<
     this._isShutdown = true;
 
     // Disable the API inherited from EventEmitter that can add more listeners and send more messages.
-    // $FlowFixMe This property is not writable.
-    this.addListener = function() {};
-    // $FlowFixMe This property is not writable.
-    this.emit = function() {};
+    // $FlowFixMe[cannot-write] This property is not writable.
+    this.addListener = function () {};
+    // $FlowFixMe[cannot-write] This property is not writable.
+    this.emit = function () {};
     // NOTE: There's also EventEmitter API like `on` and `prependListener` that we didn't add to our Flow type of EventEmitter.
 
     // Unsubscribe this bridge incoming message listeners to be sure, and so they don't have to do that.
